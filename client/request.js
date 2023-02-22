@@ -4,6 +4,7 @@ const main = require("./main.js")
 const network = require("./network.js")
 const render = require("./render.js")
 const host = "localhost"
+const css = require("css")
 const port = 80
 Array.prototype.top = function () {
   return this[this.length - 1]
@@ -47,6 +48,7 @@ render.on("commitNavigation", function (response) {
   if (contentType.indexOf("text/html") !== -1) {
     //1. 渲染进程把HTML转变为DOM树型结构
     const document = { type: "document", attributes: {}, children: [] }
+    const cssRules = []
     const tokenStack = [document]
     const parser = new htmlparser2.Parser({
       onopentag(name, attributes = {}) {
@@ -79,19 +81,27 @@ render.on("commitNavigation", function (response) {
        * 然后再构建DOM树，重新计算样式，构建布局树，绘制页面
        * @param {*} tagname
        */
-      onclosetag() {
+      onclosetag(tagname) {
+        switch (tagname) {
+          case "style":
+            const styleToken = tokenStack.top()
+            const cssAST = css.parse(styleToken.children[0].text)
+            cssRules.push(...cssAST.stylesheet.rules)
+            break
+          default:
+            break
+        }
         tokenStack.pop()
       },
     })
     //开始接收响应体
-    const buffers = []
     response.on("data", (buffer) => {
       //8.渲染进程开始HTML解析和加载子资源
       //网络进程加载了多少数据，HTML 解析器便解析多少数据。
       parser.write(buffer.toString())
     })
     response.on("end", () => {
-      console.dir(document, { depth: null })
+      console.dir(cssRules)
       //7.HTML接收接受完毕后通知主进程确认导航
       main.emit("confirmNavigation")
       //触发DOMContentLoaded事件
@@ -103,4 +113,4 @@ render.on("commitNavigation", function (response) {
 })
 
 //1.主进程接收用户输入的URL
-main.emit("request", { host, port, path: "/html.html" })
+main.emit("request", { host, port, path: "/index.html" })
