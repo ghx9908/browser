@@ -61,3 +61,9 @@
 
 - 根据 CSS 的继承和层叠规则计算 DOM 节点的样式
 - DOM 节点的样式保存在了`ComputedStyle`中
+
+### 3.4 创建布局树
+
+- 创建一棵只包含可见元素的布局树
+
+![](https://raw.githubusercontent.com/Gao-Hongxiang/image-hosting/master/img/20230222182009.png)

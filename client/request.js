@@ -58,7 +58,6 @@ render.on("commitNavigation", function (response) {
           tagName: name,
           children: [],
           attributes,
-          parent,
         }
         parent.children.push(element)
         tokenStack.push(element)
@@ -105,7 +104,11 @@ render.on("commitNavigation", function (response) {
       main.emit("confirmNavigation")
       //3. 通过stylesheet计算出DOM节点的样式
       recalculateStyle(cssRules, document)
-      console.dir(document, { depth: null })
+      //4. 根据DOM树创建布局树,就是复制DOM结构并过滤掉不显示的元素
+      const html = document.children[0]
+      const body = html.children[1]
+      const layoutTree = createLayoutTree(body)
+      console.dir(layoutTree, { depth: null })
       //触发DOMContentLoaded事件
       main.emit("DOMContentLoaded")
       //9.HTML解析完毕和加载子资源页面加载完成后会通知主进程页面加载完成
@@ -113,7 +116,35 @@ render.on("commitNavigation", function (response) {
     })
   }
 })
-
+function createLayoutTree(element) {
+  element.children = element.children.filter(isShow)
+  element.children.forEach(createLayoutTree)
+  return element
+}
+function isShow(element) {
+  let show = true //默认都显示
+  if (
+    element.tagName === "head" ||
+    element.tagName === "script" ||
+    element.tagName === "link"
+  ) {
+    show = false
+  }
+  const attributes = element.attributes
+  Object.entries(attributes).forEach(([key, value]) => {
+    if (key === "style") {
+      const attributes = value.split(/;\s*/) //[background: green;]
+      attributes.forEach((attribute) => {
+        //background: green;
+        const [property, value] = attribute.split(/:\s*/) //['background',green]
+        if (property === "display" && value === "none") {
+          show = false
+        }
+      })
+    }
+  })
+  return show
+}
 function recalculateStyle(cssRules, element, parentStyle = {}) {
   const attributes = element.attributes
   element.computedStyle = { color: parentStyle.color || "black" } //样式继承
