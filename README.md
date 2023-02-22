@@ -56,3 +56,8 @@
 - 渲染进程把 CSS 文本转为浏览器中的`stylesheet`
 - CSS 来源可能有 link 标签、style 标签和 style 行内样式
 - 渲染引擎会把 CSS 转换为`document.styleSheets`
+
+### 3.3 计算出 DOM 节点的样式
+
+- 根据 CSS 的继承和层叠规则计算 DOM 节点的样式
+- DOM 节点的样式保存在了`ComputedStyle`中

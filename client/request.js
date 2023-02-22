@@ -101,9 +101,11 @@ render.on("commitNavigation", function (response) {
       parser.write(buffer.toString())
     })
     response.on("end", () => {
-      console.dir(cssRules)
       //7.HTML接收接受完毕后通知主进程确认导航
       main.emit("confirmNavigation")
+      //3. 通过stylesheet计算出DOM节点的样式
+      recalculateStyle(cssRules, document)
+      console.dir(document, { depth: null })
       //触发DOMContentLoaded事件
       main.emit("DOMContentLoaded")
       //9.HTML解析完毕和加载子资源页面加载完成后会通知主进程页面加载完成
@@ -111,6 +113,37 @@ render.on("commitNavigation", function (response) {
     })
   }
 })
+
+function recalculateStyle(cssRules, element, parentStyle = {}) {
+  const attributes = element.attributes
+  element.computedStyle = { color: parentStyle.color || "black" } //样式继承
+  Object.entries(attributes).forEach(([key, value]) => {
+    //应用样式表
+    cssRules.forEach((rule) => {
+      let selector = rule.selectors[0]
+      if (
+        (key === "id" && selector === "#" + value) ||
+        (key === "class" && selector === "." + value)
+      ) {
+        rule.declarations.forEach(({ property, value }) => {
+          if (property) element.computedStyle[property] = value
+        })
+      }
+    })
+    //行内样式
+    if (key === "style") {
+      const attributes = value.split(/;\s*/) //[background: green;]
+      attributes.forEach((attribute) => {
+        //background: green;
+        const [property, value] = attribute.split(/:\s*/) //['background',green]
+        if (property) element.computedStyle[property] = value
+      })
+    }
+  })
+  element.children.forEach((child) =>
+    recalculateStyle(cssRules, child, element.computedStyle)
+  )
+}
 
 //1.主进程接收用户输入的URL
 main.emit("request", { host, port, path: "/index.html" })
