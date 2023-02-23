@@ -113,7 +113,9 @@ render.on("commitNavigation", function (response) {
       //6. 根据布局树生成分层树
       const layers = [layoutTree]
       createLayerTree(layoutTree, layers)
-      console.log(layers)
+      //7. 根据分层树进行生成绘制步骤并复合图层
+      const paintSteps = compositeLayers(layers)
+      console.log(paintSteps.flat().join("\r\n"))
       //触发DOMContentLoaded事件
       main.emit("DOMContentLoaded")
       //9.HTML解析完毕和加载子资源页面加载完成后会通知主进程页面加载完成
@@ -121,6 +123,37 @@ render.on("commitNavigation", function (response) {
     })
   }
 })
+function compositeLayers(layers) {
+  return layers.map((layer) => paint(layer))
+}
+function paint(element, paintSteps = []) {
+  const {
+    top = 0,
+    left = 0,
+    color = "black",
+    background = "white",
+    width = 100,
+    height = 0,
+  } = element.layout
+  if (element.type == "text") {
+    paintSteps.push(`ctx.font = '20px Impact'`)
+    paintSteps.push(`ctx.strokeStyle = '${color}'`)
+    paintSteps.push(
+      `ctx.strokeText("${element.text}",${parseFloat(left)},${
+        parseFloat(top) + 20
+      })`
+    )
+  } else {
+    paintSteps.push(`ctx.fillStyle = '${background}'`)
+    paintSteps.push(
+      `ctx.fillRect(${parseFloat(left)},${parseFloat(top)},${parseFloat(
+        width
+      )},${parseFloat(height)})`
+    )
+  }
+  element.children.forEach((child) => paint(child, paintSteps))
+  return paintSteps
+}
 function createLayerTree(element, layers) {
   //遍历子节点，判断是否要生成新的图层，如果生成，则从当前图层中删除
   element.children = element.children.filter(
