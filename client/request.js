@@ -3,6 +3,9 @@ const http = require("http")
 const main = require("./main.js")
 const network = require("./network.js")
 const render = require("./render.js")
+const gpu = require("./gpu.js")
+const { createCanvas } = require("canvas")
+const fs = require("fs")
 const host = "localhost"
 const css = require("css")
 const port = 80
@@ -27,6 +30,14 @@ main.on("DOMContentLoaded", function () {
 })
 main.on("Load", function () {
   console.log("Load")
+})
+main.on("drawQuad", function () {
+  //14.浏览器主进程然后会从GPU内存中取出位图显示到页面上
+  let drawSteps = gpu.bitMaps.flat()
+  const canvas = createCanvas(150, 250)
+  const ctx = canvas.getContext("2d")
+  eval(drawSteps.join("\r\n"))
+  fs.writeFileSync("result.png", canvas.toBuffer("image/png"))
 })
 
 /** 网络进程 **/
@@ -115,7 +126,11 @@ render.on("commitNavigation", function (response) {
       createLayerTree(layoutTree, layers)
       //7. 根据分层树进行生成绘制步骤并复合图层
       const paintSteps = compositeLayers(layers)
-      console.log(paintSteps.flat().join("\r\n"))
+      //8.把绘制步骤交给渲染进程中的合成线程进行合成
+      //9.合成线程会把图层划分为图块(tile)
+      const tiles = splitTiles(paintSteps)
+      //10.合成线程会把分好的图块发给栅格化线程池
+      raster(tiles)
       //触发DOMContentLoaded事件
       main.emit("DOMContentLoaded")
       //9.HTML解析完毕和加载子资源页面加载完成后会通知主进程页面加载完成
@@ -123,6 +138,21 @@ render.on("commitNavigation", function (response) {
     })
   }
 })
+
+function splitTiles(paintSteps) {
+  return paintSteps
+}
+function raster(tiles) {
+  //11.栅格化线程会把图片(tile)转化为位图
+  tiles.forEach((tile) => rasterThread(tile))
+  //13.当所有的图块都光栅化之后合成线程会发送绘制图块的命令给浏览器主进程
+  debugger
+  main.emit("drawQuad")
+}
+function rasterThread(tile) {
+  //12.而其实栅格化线程在工作的时候会把栅格化的工作交给GPU进程来完成
+  gpu.emit("raster", tile)
+}
 function compositeLayers(layers) {
   return layers.map((layer) => paint(layer))
 }
@@ -266,6 +296,11 @@ function recalculateStyle(cssRules, element, parentStyle = {}) {
     recalculateStyle(cssRules, child, element.computedStyle)
   )
 }
+gpu.on("raster", (tile) => {
+  //13.最终生成的位图就保存在了GPU内存中
+  let bitMap = tile
+  gpu.bitMaps.push(bitMap)
+})
 
 //1.主进程接收用户输入的URL
 main.emit("request", { host, port, path: "/index.html" })
