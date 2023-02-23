@@ -116,3 +116,10 @@
 
 ![](https://raw.githubusercontent.com/ghx9908/image-hosting/master/img/20230223110101.png)
 
+### 3.8 资源加载
+
+- CSS加载不会影响DOM解析
+- CSS加载不会阻塞JS加载，但是会阻塞JS执行
+- JS会依赖CSS加载，JS会阻塞DOM解析
+
+![](https://raw.githubusercontent.com/ghx9908/image-hosting/master/img/20230223124225.png)

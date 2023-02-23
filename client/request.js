@@ -9,6 +9,8 @@ const fs = require("fs")
 const host = "localhost"
 const css = require("css")
 const port = 80
+const loadingLinks = {}
+const loadingScripts = {}
 Array.prototype.top = function () {
   return this[this.length - 1]
 }
@@ -98,9 +100,51 @@ render.on("commitNavigation", function (response) {
             const cssAST = css.parse(styleToken.children[0].text)
             cssRules.push(...cssAST.stylesheet.rules)
             break
+          case "link":
+            const linkToken = tokenStack[tokenStack.length - 1]
+            const href = linkToken.attributes.href
+            const options = { host, port, path: href }
+            const promise = network.fetchResource(options).then(({ body }) => {
+              delete loadingLinks[href]
+              const cssAST = css.parse(body)
+              cssRules.push(...cssAST.stylesheet.rules)
+            })
+            loadingLinks[href] = promise
+            break
+          case "script":
+            const scriptToken = tokenStack[tokenStack.length - 1]
+            const src = scriptToken.attributes.src
+            if (src) {
+              const options = { host, port, path: src }
+              const promise = network
+                .fetchResource(options)
+                .then(({ body }) => {
+                  delete loadingScripts[src]
+                  return Promise.all([
+                    ...Object.values(loadingLinks),
+                    Object.values(loadingScripts),
+                  ]).then(() => {
+                    eval(body)
+                  })
+                })
+              loadingScripts[src] = promise
+            } else {
+              const script = scriptToken.children[0].text
+              const ts = Date.now() + ""
+              const promise = Promise.all([
+                ...Object.values(loadingLinks),
+                ...Object.values(loadingScripts),
+              ]).then(() => {
+                delete loadingScripts[ts]
+                eval(script)
+              })
+              loadingScripts[ts] = promise
+            }
+            break
           default:
             break
         }
+
         tokenStack.pop()
       },
     })
@@ -111,30 +155,32 @@ render.on("commitNavigation", function (response) {
       parser.write(buffer.toString())
     })
     response.on("end", () => {
-      //7.HTML接收接受完毕后通知主进程确认导航
-      main.emit("confirmNavigation")
-      //3. 通过stylesheet计算出DOM节点的样式
-      recalculateStyle(cssRules, document)
-      //4. 根据DOM树创建布局树,就是复制DOM结构并过滤掉不显示的元素
-      const html = document.children[0]
-      const body = html.children[1]
-      const layoutTree = createLayoutTree(body)
-      //5.并计算各个元素的布局信息
-      updateLayoutTree(layoutTree)
-      //6. 根据布局树生成分层树
-      const layers = [layoutTree]
-      createLayerTree(layoutTree, layers)
-      //7. 根据分层树进行生成绘制步骤并复合图层
-      const paintSteps = compositeLayers(layers)
-      //8.把绘制步骤交给渲染进程中的合成线程进行合成
-      //9.合成线程会把图层划分为图块(tile)
-      const tiles = splitTiles(paintSteps)
-      //10.合成线程会把分好的图块发给栅格化线程池
-      raster(tiles)
-      //触发DOMContentLoaded事件
-      main.emit("DOMContentLoaded")
-      //9.HTML解析完毕和加载子资源页面加载完成后会通知主进程页面加载完成
-      main.emit("Load")
+      Promise.all(Object.values(loadingScripts)).then(() => {
+        //7.HTML接收接受完毕后通知主进程确认导航
+        main.emit("confirmNavigation")
+        //3. 通过stylesheet计算出DOM节点的样式
+        recalculateStyle(cssRules, document)
+        //4. 根据DOM树创建布局树,就是复制DOM结构并过滤掉不显示的元素
+        const html = document.children[0]
+        const body = html.children[1]
+        const layoutTree = createLayoutTree(body)
+        //5.并计算各个元素的布局信息
+        updateLayoutTree(layoutTree)
+        //6. 根据布局树生成分层树
+        const layers = [layoutTree]
+        createLayerTree(layoutTree, layers)
+        //7. 根据分层树进行生成绘制步骤并复合图层
+        const paintSteps = compositeLayers(layers)
+        //8.把绘制步骤交给渲染进程中的合成线程进行合成
+        //9.合成线程会把图层划分为图块(tile)
+        const tiles = splitTiles(paintSteps)
+        //10.合成线程会把分好的图块发给栅格化线程池
+        raster(tiles)
+        //触发DOMContentLoaded事件
+        main.emit("DOMContentLoaded")
+        //9.HTML解析完毕和加载子资源页面加载完成后会通知主进程页面加载完成
+        main.emit("Load")
+      })
     })
   }
 })
@@ -303,4 +349,4 @@ gpu.on("raster", (tile) => {
 })
 
 //1.主进程接收用户输入的URL
-main.emit("request", { host, port, path: "/index.html" })
+main.emit("request", { host, port, path: "/load.html" })
