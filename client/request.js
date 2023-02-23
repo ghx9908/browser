@@ -110,7 +110,10 @@ render.on("commitNavigation", function (response) {
       const layoutTree = createLayoutTree(body)
       //5.并计算各个元素的布局信息
       updateLayoutTree(layoutTree)
-      console.dir(layoutTree, { depth: null })
+      //6. 根据布局树生成分层树
+      const layers = [layoutTree]
+      createLayerTree(layoutTree, layers)
+      console.log(layers)
       //触发DOMContentLoaded事件
       main.emit("DOMContentLoaded")
       //9.HTML解析完毕和加载子资源页面加载完成后会通知主进程页面加载完成
@@ -118,6 +121,37 @@ render.on("commitNavigation", function (response) {
     })
   }
 })
+function createLayerTree(element, layers) {
+  //遍历子节点，判断是否要生成新的图层，如果生成，则从当前图层中删除
+  element.children = element.children.filter(
+    (child) => !createNewLayer(child, layers)
+  )
+  element.children.forEach((child) => createLayerTree(child, layers))
+  return layers
+}
+function createNewLayer(element, layers) {
+  let createdNewLayer = false
+  const attributes = element.attributes
+  Object.entries(attributes).forEach(([key, value]) => {
+    if (key === "style") {
+      const attributes = value.split(/;\s*/) //[background: green;]
+      attributes.forEach((attribute) => {
+        //background: green;
+        const [property, value] = attribute.split(/:\s*/) //['background',green]
+        if (
+          property === "position" &&
+          (value === "absolute" || value === "fixed")
+        ) {
+          //因为这是一个新的层，所以里面的元素要重新计算一下自己的布局位置
+          updateLayoutTree(element)
+          layers.push(element)
+          createdNewLayer = true
+        }
+      })
+    }
+  })
+  return createdNewLayer
+}
 /**
  * 计算布局树上每个元素的布局信息
  * @param {*} element
