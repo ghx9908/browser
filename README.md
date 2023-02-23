@@ -67,3 +67,7 @@
 - 创建一棵只包含可见元素的布局树
 
 ![](https://raw.githubusercontent.com/Gao-Hongxiang/image-hosting/master/img/20230222182009.png)
+
+### 3.5 计算布局
+
+- 计算各个元素的布局

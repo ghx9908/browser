@@ -108,6 +108,8 @@ render.on("commitNavigation", function (response) {
       const html = document.children[0]
       const body = html.children[1]
       const layoutTree = createLayoutTree(body)
+      //5.并计算各个元素的布局信息
+      updateLayoutTree(layoutTree)
       console.dir(layoutTree, { depth: null })
       //触发DOMContentLoaded事件
       main.emit("DOMContentLoaded")
@@ -116,6 +118,28 @@ render.on("commitNavigation", function (response) {
     })
   }
 })
+/**
+ * 计算布局树上每个元素的布局信息
+ * @param {*} element
+ * @param {*} top 自己距离自己父节点的顶部的距离
+ * @param {*} parentTop
+ */
+function updateLayoutTree(element, top = 0, parentTop = 0) {
+  const computedStyle = element.computedStyle
+  element.layout = {
+    top: top + parentTop, //0
+    left: 0,
+    width: computedStyle.width,
+    height: computedStyle.height,
+    color: computedStyle.color,
+    background: computedStyle.background,
+  }
+  let childTop = 0
+  element.children.forEach((child) => {
+    updateLayoutTree(child, childTop, element.layout.top) // 0 0
+    childTop += parseFloat(child.computedStyle.height || 0) //childTop= 50
+  })
+}
 function createLayoutTree(element) {
   element.children = element.children.filter(isShow)
   element.children.forEach(createLayoutTree)
